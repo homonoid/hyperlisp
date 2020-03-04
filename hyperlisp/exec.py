@@ -1,5 +1,4 @@
 from fractions import Fraction
-import inspect
 from .error import HlError
 
 

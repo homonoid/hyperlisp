@@ -17,13 +17,12 @@ def treeify(tree, prefix = '  '):
 from operator import add, sub, mul, truediv as div, eq
 from fractions import Fraction
 
-exe = HlInterpreter()
 
-original_input = input
+exe = HlInterpreter()
 
 
 exe.funcpy('__python_print', print)
-exe.funcpy('__python_input', original_input)
+exe.funcpy('__python_input', input)
 exe.funcpy('__python_add', add)
 exe.funcpy('__python_sub', sub)
 exe.funcpy('__python_mul', mul)
@@ -42,7 +41,7 @@ if len(args := sys.argv[1:]) == 1:
     except HlError as error:
       print('=== Sorry! ===\n', repr(error))
 elif len(args) == 0:
-  import readline # it's here so __python_input is not `readline`d
+  import readline
   while True:
     line = input('>> ')
     try:

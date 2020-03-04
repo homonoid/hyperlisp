@@ -1,5 +1,5 @@
 try:
-  import re2s as re
+  import re2 as re
 except ImportError:
   import re
 
