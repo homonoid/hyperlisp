@@ -14,7 +14,7 @@ Run the LISP with `python -m hyperlisp` with or without (starts the REPL) filena
 Builtin features:
 
 * [x] bind
-* [ ] func
+* [x] func
 * [ ] when
 * [ ] equ
 
