@@ -1,0 +1,14 @@
+; Prelude (just so this thing works)
+
+(bind * __python_mul)
+(bind outln __python_print)
+(bind getln __python_input)
+(bind num __s_to_fraction)
+
+
+(bind square
+  (func n
+    (* n n)))
+
+(bind number (num (getln "Type a number: ")))
+(outln (square number))
