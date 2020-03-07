@@ -1,23 +1,30 @@
 # Hyperlisp
 
-My approach to writing a LISP.
+A lisp of my own!
 
-### Running
+# Lexical grammar
 
-It is recommended that you have `re2` (it's slightly faster, AFAIK). If you don't, Python's `re` is chosen automatically.
-Run the LISP with `python -m hyperlisp` with or without (starts the REPL) filename argument.
+```
+NUM     /\-?([0-9]+\.[0-9]+|[1-9][0-9]*|0)/
+ID      /[a-zA-Z_][a-zA-Z0-9_]*|[\+\-\*\/]/
+STR     /"([^"\n\\]|\\[rbnv"\\])*"/
+[       "["
+]       "]"
+(       "("
+)       ")"
+EOF     "\0"
+```
 
-### TODO
+# Syntax
 
-* [ ] Formatting
+```
+entry ::= listy EOF
+listy ::= (list | atom)+
+list ::= "(" [listy] ")"
+atom ::= ID | NUM | STR | "[" [listy] "]"
+```
 
-Builtin features:
+# Functionality (built-in)
 
-* [x] bind
-* [x] func
-* [ ] when
-* [ ] equ
-
-Stdlib features:
-
-* ?
+* `(bind Identifier _)` variable binding
+* `(func <Array|List|Identifier> ...)` anonymous function

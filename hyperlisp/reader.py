@@ -16,6 +16,9 @@ class HlNode:
 
 
 class HlReader:
+  """Lexical analyzer and syntactical
+     analyzer for Hyperlisp, combined"""
+
   def __init__(self, filename, source):
     self.filename = filename
     self.src = source + '\0'

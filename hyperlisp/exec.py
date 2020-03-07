@@ -1,115 +1,103 @@
 from fractions import Fraction
+from .func import Func, External
 from .error import HlError
 
 
 class HlInterpreter:
+  """Hyperlisp tree-walking interpreter
+     Implements the semantics of Hyperlisp"""
+
   def __init__(self):
     self.reader = None
-    self.metascope = {}
+    self.globals = {}
+    self.immutables = []
+
+  ### PRIVATE: ###
 
   def _error(self, position, message):
-    """Produce a runtime error"""
-    raise HlError(
-      f'Runtime error: {message}', 
-      self.reader.filename, position, self.reader.src, near=False
-    )
-  
-  def _func(self, params, body, scope):
-    """Implementation for builtin (func <Array|List|Identifier> _+)"""
-    def callee(pos, *args):
-      paramc, argc = len(params), len(args)
-      if paramc == argc:
-        params_str = [param.value for param in params]
-        return self._eval(body, {**scope, **dict(zip(params_str, args),)})[-1]
-      else:
-        self._error(pos,
-          f'invalid number of arguments: expected {paramc}, but found {argc}'
-        )
-    return callee
+    file, src = self.reader.filename, self.reader.src
+    raise HlError(f'Runtime error: {message}', file, position, src, near=False)
 
   def _bind(self, name, value, scope):
-    """Implementation for builtin (bind Identifier _)"""
-    if (var := name.value) not in self.metascope:
-      scope[var] = self._eval(value, scope)
-    else:
-      self._error(name.pos, f'"{var}" is bound externally, so it cannot mutate')
+    if (var := name.value) in self.immutables:
+      self._error(name.pos, f'"{var}" is bound externally, so it cannot be changed')
+    scope[name.value] = self._eval(value, scope)
 
-  def _invoke(self, list_, scope):
-    """Try to invoke a user-defined/builtin procedure; if not possible, 
-       interpret it as an array"""
-    name, *tail = list_
-    arity = len(tail)
-    if name.value == 'bind' and arity == 2 and tail[0].type == 'Identifier':
-      return self._bind(*tail, scope)
-    elif name.value == 'func':
-      if arity >= 2:
-        if tail[0].type == 'Identifier':
-          return self._func([tail[0]], tail[1:], scope)
-        elif tail[0].type in ('List', 'Array') and \
-              all([param.type == 'Identifier' for param in tail[0].value]):
-          return self._func(tail[0].value, tail[1:], scope)
-      self._error(tail[0].pos, f'invalid parameters to func')
-    elif name.type == 'Identifier' and name.value in scope.keys():
-      if callable(callee := scope[name.value]):
-        return callee(name.pos, *[self._eval(arg, scope) for arg in tail])
-      self._error(name.pos, f'"{name.value}" is not a func')
-    elif name.type == 'List' and callable(callee := self._eval(name, scope)):
-      return callee(name.pos, *[self._eval(arg, scope) for arg in tail])
-    else:
-      return self._eval(list_, scope)
+  def _list(self, elements, scope):
+    name, *tail = elements
+    if name.value == 'bind': # (bind Identifier _)
+      if len(tail) == 2 and tail[0].type == 'Identifier':
+        return self._bind(*tail, scope)
+      self._error(name.pos, 'invalid arguments to bind')
+    elif name.value == 'func': # (func <Array|List|Identifier> ...)
+      if len(tail) >= 2:
+        params = tail[0].value if tail[0].type in ('List', 'Array') else [tail[0]]
+        if all(params := [p.type == 'Identifier' and p.value for p in params]):
+          return Func(self._eval, params, tail[1:], scope, name.pos)
+      self._error(name.pos, 'invalid arguments to func')
+    elif name.type in ('Identifier', 'List'): # (<Identifier|List> ...)
+      callee = self._eval(name, scope)
+      if callable(callee):
+        args = (self._eval(arg, scope) for arg in tail)
+        try:
+          return callee(name.pos, *args)[-1]
+        except TypeError as error:
+          kind, details = error.args
+          extern = 'external "{}", imported as "{}", failed with {}'
+          user = kind == 'user' and '{} argument(s) found where {} is expected'
+          self._error(name.pos, (user or extern).format(*details))
+    return self._eval(elements, scope)
 
-  def _eval(self, given, scope):
-    """Execute a single node, or a `list` of nodes, according to `scope`"""
-    if type(given) is list:
-      return [self._eval(node, scope) for node in given]
-    elif given.type == 'Root':
-      return self._eval(given.value, scope)
-    elif given.type == 'List':
-      if not given.value:
+  def _eval(self, node, scope):
+    if type(node) is list:
+      return [self._eval(node, scope) for node in node]
+    elif node.type == 'Root':
+      return self._eval(node.value, scope)
+    elif node.type == 'List':
+      if not node.value:
         return []
-      elif given.value[0].type not in ('Identifier', 'List'):
-        return self._eval(given.value, scope)
+      elif node.value[0].type in ('Identifier', 'List'):
+        return self._list(node.value, scope)
       else:
-        return self._invoke(given.value, scope)
-    elif given.type == 'Array':
-      return self._eval(given.value, scope)
-    elif given.type == 'Identifier':
-      if (name := given.value) not in scope:
-        self._error(given.pos, f'symbol "{name}" is not bound to any value')
+        return self._eval(node.value, scope)
+    elif node.type == 'Array':
+      return self._eval(node.value, scope)
+    elif node.type == 'Identifier':
+      if (name := node.value) not in scope:
+        self._error(node.pos, f'symbol "{name}" is not bound to any value')
       return scope[name]
-    elif given.type == 'Number':
-      return Fraction(float(given.value),).limit_denominator()
-    elif given.type == 'String':
-      return given.value
+    elif node.type == 'Number':
+      return Fraction(float(node.value)).limit_denominator()
+    elif node.type == 'String':
+      return node.value
+    else:
+      raise TypeError('Internal error: trying to interpret invalid node')
 
-  def funcpy(self, name, fun):
-    """Import a Python callable `fun` into the metascope under the name `name`"""
-    assert callable(fun)
-    def _handler(pos, *args):
-      try:
-        return fun(*args)
-      except Exception as e:
-        # TODO: provide additional information about the error (lineno, file, etc.)
-        self._error(pos, 
-          f'external function "{fun.__name__}" (imported as "{name}")' \
-          f' failed with {type(e).__name__}'
-        )
-    self.metascope[name] = _handler
+  ### PUBLIC: ###
 
-  def bindpy(self, name, value):
-    """Check if the value can be used within the language
-       and, if so, import it into the metascope"""
-    if callable(value): 
-      raise TypeError('Use "funcpy" to import a callable')
-    elif type(value) in (int, float):
-      value = Fraction(value).limit_denominator()
-    assert type(value) in (list, Fraction, str)
-    self.metascope[name] = value
+  def function(self, name, callable_):
+    """Import a Python callable under the name `name`"""
+    assert callable(callable_), f'"{name}" must be a function'
+    self.globals[name] = External(name, callable_)
+    self.immutables.append(name)
+
+  def const(self, name, value):
+    """Import `value` under the name `name` 
+       if Hyperlisp will be able to understand it"""
+    assert not callable(value), \
+      'Use "function" to import a function'
+    assert type(value) in (list, int, float, bool, Fraction, str), \
+      f'Hyperlisp cannot understand the value for "{name}"'
+    self.globals[name] = \
+      Fraction(value).limit_denominator() if type(value) in (int, float, bool) else value
+    self.immutables.append(name)
 
   def update(self, reader):
-    """Update the reader that the interpreter interacts with"""
+    """Update/set the reader"""
     self.reader = reader
 
   def execute(self):
-    """Interact with the reader and execute the AST it returns"""
-    return self._eval(self.reader.process(), self.metascope)[-1]
+    """Interact with the reader 
+       and execute the AST it returns"""
+    assert self.reader is not None, 'There is no reader to interact with'
+    return self._eval(self.reader.process(), self.globals)[-1]

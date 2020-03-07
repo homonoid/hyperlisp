@@ -26,6 +26,3 @@ class HlError(Exception):
 
   def __repr__(self):
     return self._fmt()
-
-  def __str__(self):
-    return f'<HlError {self.line=} {self.col=} {self.pos=} {self.cap=}>'

@@ -5,6 +5,7 @@ import sys
 from .reader import HlReader
 from .error import HlError
 from .exec import HlInterpreter
+from .fmt import fmt
 
 
 def treeify(tree, prefix = '  '):
@@ -21,14 +22,14 @@ from fractions import Fraction
 exe = HlInterpreter()
 
 
-exe.funcpy('__python_print', print)
-exe.funcpy('__python_input', input)
-exe.funcpy('__python_add', add)
-exe.funcpy('__python_sub', sub)
-exe.funcpy('__python_mul', mul)
-exe.funcpy('__python_div', div)
-exe.funcpy('__python_equ', eq)
-exe.funcpy('__s_to_fraction', lambda s: Fraction(s).limit_denominator())
+exe.function('__python_print', print)
+exe.function('__python_input', input)
+exe.function('__python_add', add)
+exe.function('__python_sub', sub)
+exe.function('__python_mul', mul)
+exe.function('__python_div', div)
+exe.function('__python_equ', eq)
+exe.function('__s_to_fraction', lambda s: Fraction(s).limit_denominator())
 
 
 if len(args := sys.argv[1:]) == 1:
@@ -43,12 +44,12 @@ if len(args := sys.argv[1:]) == 1:
 elif len(args) == 0:
   import readline
   while True:
-    line = input('>> ')
+    line = input('~| ')
     try:
       reader = HlReader('<stdin>', line)
       exe.update(reader)
       res = exe.execute()
-      res and print(res)
+      res is not None and print(fmt(res))
     except HlError as error:
       print('=== Sorry! ===\n', repr(error))
 else:
